@@ -1,8 +1,8 @@
-import discord, jPoints, random, time
+import discord, jPoints, time
 
 client = discord.Client()
 admin_id = "ADMIN-ID" # TODO: insert ADMIN-ID
-prefix = '?'
+prefix = '.'
 
 num_emojis = ['🇦', '🇧', '🇨', '🇩', '🇪', '🇫', '🇬', '🇭', '🇮', '🇯']
 
@@ -99,7 +99,7 @@ async def on_message(message):
         if len(options) > 10:
             options = options[:10]
 
-        print(options)
+        # print(options)
 
         voting = discord.Embed(
             title=values['title'],
@@ -147,13 +147,54 @@ async def on_message(message):
             jPoints.vote.set(votemsg.id + emoji, 0)
 
         endtime = time.strftime('%H:') + str((int(time.strftime('%M')) + int(duration)) % 60)
-        print(endtime)
+        # print(endtime)
         jPoints.vote.set(votemsg.id + "TIME", endtime)
 
         # add reactions:
 
         for i in range(len(options)):
             await client.add_reaction(votemsg, num_emojis[i])
+
+    if message.content.startswith(prefix + 'invite'):
+        await client.send_message(
+            message.channel,
+            "Invite me to your server:\n"
+            "https://discordapp.com/oauth2/authorize?client_id=353537045320433664&scope=bot&permissions=27712"
+        )
+
+    if message.content.startswith(prefix + 'help'):
+        helpmsg = discord.Embed(
+            title="VoteIt - Help",
+            description="All commands and how they work.",
+            color=0xcd3333
+        )
+
+        helpmsg.add_field(
+            name=prefix + "vote",
+            value="Start a voting:\n"
+                  "`{0}vote [options]`\n\n"
+                  "As options you can use:\n"
+                  "Set title: `--title` or `-T`\n"
+                  "Set vote options: `--options` or `-O`, separate options with `;`\n"
+                  "Set duration: `-D`, value in minutes\n\n"
+                  "All values have to stand in double quotes. For example:\n"
+                  '`{0}vote -T "Test" -O "option1;option2" -D "15"`'.format(prefix)
+        )
+        helpmsg.add_field(
+            name=prefix + "invite",
+            value="Sends a link to invite me to a server.",
+            inline=False
+        )
+        helpmsg.add_field(
+            name=prefix + "help",
+            value="Shows this help site.",
+            inline=False
+        )
+
+        if message.author.server_permissions.administrator:
+            await client.send_message(message.channel, embed=helpmsg)
+        else:
+            await client.send_message(message.author, embed=helpmsg)
 
 
 @client.event
@@ -170,7 +211,7 @@ async def on_reaction_add(reaction, user):
                 reaction.message,
                 "The voting is over.\n"
                 "Winner(s): " + get_leadings_str(reaction.message.id) +
-                " with " + leading_options(reaction.message.id)[0] + " vote(s)."
+                " with " + str(leading_options(reaction.message.id)[0]) + " vote(s)."
             )
 
 
@@ -193,4 +234,4 @@ async def on_reaction_remove(reaction, user):
 
 
 if __name__ == "__main__":
-    client.run("[BOT-TOKEN]") # TODO: insert BOT-TOKEN
+    client.run("BOT-TOKEN") # TODO: insert BOT-TOKEN

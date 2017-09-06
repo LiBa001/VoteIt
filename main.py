@@ -30,7 +30,19 @@ def leading_options(message_id):
 
 
 def time_left(message_id):
-    return int(jPoints.vote.get(message_id + "TIME")[3:]) - int(time.strftime('%M'))
+    try:
+        minutes = int(jPoints.vote.get(message_id + "TIME")[3:])
+        hours = int(jPoints.vote.get(message_id + "TIME")[:2])
+    except IndexError:
+        return None
+
+    mins_now = int(time.strftime('%M'))
+    hours_now = int(time.strftime('%H'))
+
+    if hours_now == hours:
+        return minutes - mins_now
+    elif hours_now < hours:
+        return (60 - mins_now) + minutes
 
 
 def get_leadings_str(message_id):
@@ -136,18 +148,25 @@ async def on_message(message):
         except ValueError:
             await client.send_message(message.channel, "Invalid duration.")
             duration = 10
-
-        votemsg = await client.send_message(
-            message.channel,
-            "The voting is over in " + str(duration) + time.strftime(" minutes from now (%H:%M)."),
-            embed=voting
-        )
+        
+        try:
+            votemsg = await client.send_message(
+                message.channel,
+                "The voting is over in " + str(duration) + time.strftime(" minutes from now (%H:%M)."),
+                embed=voting
+            )
+        except discord.errors.Forbidden:
+            return 0
 
         for emoji in num_emojis:
             jPoints.vote.set(votemsg.id + emoji, 0)
 
-        endtime = time.strftime('%H:') + str((int(time.strftime('%M')) + int(duration)) % 60)
+        endtime = time.strftime('%H:') + str(int(time.strftime('%M')) + int(duration))
         # print(endtime)
+        if int(endtime[3:]) % 60 < int(time.strftime('%M')):
+            endtime = str(int(endtime[:2]) + 1) + ':' + str(int(endtime[3:]) % 60)
+        if len(endtime) < 5:
+            endtime = endtime[:3] + '0' + endtime[3:]
         jPoints.vote.set(votemsg.id + "TIME", endtime)
 
         # add reactions:
@@ -191,16 +210,23 @@ async def on_message(message):
             inline=False
         )
 
-        if message.author.server_permissions.administrator:
-            await client.send_message(message.channel, embed=helpmsg)
-        else:
-            await client.send_message(message.author, embed=helpmsg)
+        try:
+            if message.author.server_permissions.administrator:
+                await client.send_message(message.channel, embed=helpmsg)
+            else:
+                await client.send_message(message.author, embed=helpmsg)
+        except discord.errors.Forbidden:
+            return 0
+        except AttributeError:
+            return 0
 
 
 @client.event
 async def on_reaction_add(reaction, user):
-    if user.id != client.user.id:
-        if time_left(reaction.message.id) > 0:
+    if user.id != client.user.id and reaction.emoji in num_emojis:
+        if time_left(reaction.message.id) is None:
+            return None
+        elif time_left(reaction.message.id) > 0:
             jPoints.vote.add_to_Value(reaction.message.id + reaction.emoji, 1)
             await client.edit_message(
                 reaction.message,
@@ -213,12 +239,15 @@ async def on_reaction_add(reaction, user):
                 "Winner(s): " + get_leadings_str(reaction.message.id) +
                 " with " + str(leading_options(reaction.message.id)[0]) + " vote(s)."
             )
+            jPoints.vote.remove_Element(reaction.message.id + "TIME")
 
 
 @client.event
 async def on_reaction_remove(reaction, user):
-    if user.id != client.user.id:
-        if time_left(reaction.message.id) > 0:
+    if user.id != client.user.id and reaction.emoji in num_emojis:
+        if time_left(reaction.message.id) is None:
+            return None
+        elif time_left(reaction.message.id) > 0:
             jPoints.vote.remove_from_Value(reaction.message.id + reaction.emoji, 1)
             await client.edit_message(
                 reaction.message,
@@ -231,6 +260,7 @@ async def on_reaction_remove(reaction, user):
                 "Winner(s): " + get_leadings_str(reaction.message.id) +
                 " with " + str(leading_options(reaction.message.id)[0]) + " vote(s)."
             )
+            jPoints.vote.remove_Element(reaction.message.id + "TIME")
 
 
 if __name__ == "__main__":

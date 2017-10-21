@@ -174,14 +174,14 @@ async def on_message(message):
         for i in range(len(options)):
             await client.add_reaction(votemsg, num_emojis[i])
 
-    if message.content.startswith(prefix + 'invite'):
+    elif message.content.startswith(prefix + 'invite'):
         await client.send_message(
             message.channel,
             "Invite me to your server:\n"
             "https://discordapp.com/oauth2/authorize?client_id=353537045320433664&scope=bot&permissions=27712"
         )
 
-    if message.content.startswith(prefix + 'help'):
+    elif message.content.startswith(prefix + 'help'):
         helpmsg = discord.Embed(
             title="VoteIt - Help",
             description="All commands and how they work.",
@@ -215,10 +215,14 @@ async def on_message(message):
                 await client.send_message(message.channel, embed=helpmsg)
             else:
                 await client.send_message(message.author, embed=helpmsg)
+                await client.add_reaction(message, "✅")
         except discord.errors.Forbidden:
             return 0
         except AttributeError:
             return 0
+    
+    elif client.user in message.mentions:
+        await client.send_message(message.channel, "Type `{0}help` to see available commands.".format(prefix))
 
 
 @client.event

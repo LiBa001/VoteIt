@@ -1,7 +1,7 @@
 import discord, jPoints, time
 
 client = discord.Client()
-admin_id = "ADMIN-ID" # TODO: insert ADMIN-ID
+admin_id = "269959141508775937"
 prefix = '.'
 
 num_emojis = ['🇦', '🇧', '🇨', '🇩', '🇪', '🇫', '🇬', '🇭', '🇮', '🇯']
@@ -216,6 +216,7 @@ async def on_message(message):
             else:
                 await client.send_message(message.author, embed=helpmsg)
                 await client.add_reaction(message, "✅")
+
         except discord.errors.Forbidden:
             return 0
         except AttributeError:
@@ -268,4 +269,4 @@ async def on_reaction_remove(reaction, user):
 
 
 if __name__ == "__main__":
-    client.run("BOT-TOKEN") # TODO: insert BOT-TOKEN
+    client.run("BOT-TOKEN")  # TODO: insert Token

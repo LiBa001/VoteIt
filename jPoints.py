@@ -71,4 +71,4 @@ class Element:
         return position
 
 
-vote = Element("PATH/votes.json") # TODO: insert PATH
+vote = Element("/home/pi/bots/discord/VoteIt/votes.json")  # TODO: adjust path

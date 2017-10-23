@@ -7,13 +7,25 @@ prefix = '.'
 num_emojis = ['🇦', '🇧', '🇨', '🇩', '🇪', '🇫', '🇬', '🇭', '🇮', '🇯']
 
 
+def checkEqual(iterator):
+    iterator = iter(iterator)
+    try:
+        first = next(iterator)
+    except StopIteration:
+        return True
+    return all(first == rest for rest in iterator)
+
+
 def leading_options(message_id):
     option_values = []
 
     for emoji in num_emojis:
         option_values.append([emoji, jPoints.vote.get(message_id + emoji)])
 
-    option_values.sort(key=lambda x: x[1], reverse=True)
+    if checkEqual(list(map(lambda x: x[1], option_values))):
+        return option_values[0][1], ["*Nothing*"]
+    else:
+        option_values.sort(key=lambda x: x[1], reverse=True)
 
     leadings = (option_values[0][1], [])
     for i in range(len(option_values)):

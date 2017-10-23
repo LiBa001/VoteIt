@@ -1,10 +1,37 @@
 import discord, jPoints, time
+import urllib.request, json
 
 client = discord.Client()
 admin_id = "269959141508775937"
 prefix = '.'
 
 num_emojis = ['🇦', '🇧', '🇨', '🇩', '🇪', '🇫', '🇬', '🇭', '🇮', '🇯']
+
+
+def post_to_dbotsorg():
+    count_json = json.dumps({
+        "server_count": len(client.servers)
+    })
+
+    # Resolve HTTP redirects
+    dbotsorg_redirect_url = urllib.request.urlopen(
+        "https://discordbots.org/api/bots/{0}/stats".format(client.user.id)
+    ).geturl()
+
+    # Construct request and post server count
+    dbotsorg_req = urllib.request.Request(dbotsorg_redirect_url)
+
+    dbotsorg_req.add_header(
+        "Content-Type",
+        "application/json"
+    )
+
+    dbotsorg_req.add_header(
+        "Authorization",
+        "<API_KEY>"
+    )
+
+    urllib.request.urlopen(dbotsorg_req, count_json.encode("ascii"))
 
 
 def checkEqual(iterator):
@@ -84,6 +111,8 @@ async def on_ready():
     print(client.user.name)
     print(client.user.id)
     print("-------------")
+
+    post_to_dbotsorg()
 
 
 @client.event
@@ -278,6 +307,11 @@ async def on_reaction_remove(reaction, user):
                 " with " + str(leading_options(reaction.message.id)[0]) + " vote(s)."
             )
             jPoints.vote.remove_Element(reaction.message.id + "TIME")
+
+
+@client.event
+async def on_server_join(server):
+    post_to_dbotsorg()
 
 
 if __name__ == "__main__":

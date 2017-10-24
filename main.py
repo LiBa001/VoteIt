@@ -1,5 +1,6 @@
 import discord, jPoints, time
 import urllib.request, json
+import asyncio
 
 client = discord.Client()
 admin_id = "269959141508775937"
@@ -117,6 +118,12 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
+    commands = ['vote', 'help', 'invite', 'info', 'about']
+    commands = list(map(lambda cmd: prefix + cmd, commands))
+
+    if message.content.lower().startswith(tuple(commands)):
+        await client.send_typing(message.channel)
+
     if message.content.startswith(prefix + 'vote'):
         content = message.content[6:]
 
@@ -250,6 +257,11 @@ async def on_message(message):
             value="Shows this help site.",
             inline=False
         )
+        helpmsg.add_field(
+            name=prefix + "info",
+            value="Detailed information about the bot and more.",
+            inline=False
+        )
 
         try:
             if message.author.server_permissions.administrator:
@@ -262,6 +274,51 @@ async def on_message(message):
             return 0
         except AttributeError:
             return 0
+
+    elif message.content.lower().startswith((prefix + 'info', prefix + 'about')):
+        infotext = discord.Embed(
+            title="VoteIt",
+            description="About the bot.",
+            color=0xcd3333,
+            url="https://liba001.github.io/VoteIt/"
+        )
+        infotext.set_author(
+            name="Linus Bartsch | LiBa01#8817",
+            url="https://liba001.github.io/",
+            icon_url="https://avatars0.githubusercontent.com/u/30984789?s=460&v=4"
+        )
+        infotext.set_thumbnail(
+            url="https://images.discordapp.net/avatars/353537045320433664/24558d0686edd48e2e6c6df9e3802c96.png?size=512"
+        )
+        infotext.add_field(
+            name="Developer",
+            value="Name: **Linus Bartsch**\n"
+                  "Discord: **LiBa01#8817**\n"
+                  "GitHub: [LiBa001](https://github.com/LiBa001)\n"
+                  "I'm also at [Discordbots.org](https://discordbots.org/user/269959141508775937)",
+            inline=True
+        )
+        infotext.add_field(
+            name="Developed in:",
+            value="Language: **Python3.6**\n"
+                  "Library: **discord.py** (0.16.8)\n"
+        )
+        infotext.add_field(
+            name="Commands",
+            value="Type `{0}help` to get all commands.\n"
+                  "Join the [Official Support Server](https://discord.gg/z3X3uN4) "
+                  "if you have any questions or suggestions.".format(prefix)
+        )
+        infotext.add_field(
+            name="Stats",
+            value="Server count: **{0}**\n"
+                  "Uptime: **{1}** hours, **{2}** minutes".format(len(client.servers), up_hours, up_minutes)
+        )
+        infotext.set_footer(
+            text="Special thanks to MaxiHuHe04#8905 who supported me a few times."
+        )
+
+        await client.send_message(message.channel, embed=infotext)
     
     elif client.user in message.mentions:
         await client.send_message(message.channel, "Type `{0}help` to see available commands.".format(prefix))
@@ -315,4 +372,20 @@ async def on_server_join(server):
 
 
 if __name__ == "__main__":
+    async def uptime_count():
+        await client.wait_until_ready()
+        global up_hours
+        global up_minutes
+        up_hours = 0
+        up_minutes = 0
+
+        while not client.is_closed:
+            await asyncio.sleep(60)
+            up_minutes += 1
+            if up_minutes == 60:
+                up_minutes = 0
+                up_hours += 1
+
+
+    client.loop.create_task(uptime_count())
     client.run("BOT-TOKEN")  # TODO: insert Token

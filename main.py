@@ -1,286 +1,183 @@
-import discord, jPoints, time
-import urllib.request, json
-import asyncio
+from handler import *
 
 client = discord.Client()
-admin_id = "269959141508775937"
-prefix = '.'
-
-num_emojis = ['🇦', '🇧', '🇨', '🇩', '🇪', '🇫', '🇬', '🇭', '🇮', '🇯']
-
-
-def post_to_dbotsorg():
-    count_json = json.dumps({
-        "server_count": len(client.servers)
-    })
-
-    # Resolve HTTP redirects
-    dbotsorg_redirect_url = urllib.request.urlopen(
-        "https://discordbots.org/api/bots/{0}/stats".format(client.user.id)
-    ).geturl()
-
-    # Construct request and post server count
-    dbotsorg_req = urllib.request.Request(dbotsorg_redirect_url)
-
-    dbotsorg_req.add_header(
-        "Content-Type",
-        "application/json"
-    )
-
-    dbotsorg_req.add_header(
-        "Authorization",
-        "<API_KEY>"
-    )
-
-    urllib.request.urlopen(dbotsorg_req, count_json.encode("ascii"))
-
-
-def checkEqual(iterator):
-    iterator = iter(iterator)
-    try:
-        first = next(iterator)
-    except StopIteration:
-        return True
-    return all(first == rest for rest in iterator)
-
-
-def leading_options(message_id):
-    option_values = []
-
-    for emoji in num_emojis:
-        option_values.append([emoji, jPoints.vote.get(message_id + emoji)])
-
-    if checkEqual(list(map(lambda x: x[1], option_values))):
-        return option_values[0][1], ["*Nothing*"]
-    else:
-        option_values.sort(key=lambda x: x[1], reverse=True)
-
-    leadings = (option_values[0][1], [])
-    for i in range(len(option_values)):
-        if i != 0:
-            if leadings[0] == option_values[i][1]:
-                leadings[1].append(option_values[i][0])
-            else:
-                return leadings
-
-        elif i == 0:
-            leadings[1].append(option_values[i][0])
-
-    return leadings
-
-
-def time_left(message_id):
-    try:
-        minutes = int(jPoints.vote.get(message_id + "TIME")[3:])
-        hours = int(jPoints.vote.get(message_id + "TIME")[:2])
-    except IndexError:
-        return None
-
-    mins_now = int(time.strftime('%M'))
-    hours_now = int(time.strftime('%H'))
-
-    if hours_now == hours:
-        return minutes - mins_now
-    elif hours_now < hours:
-        return (60 - mins_now) + minutes
-
-
-def get_leadings_str(message_id):
-    leadings_str = ""
-
-    for option in leading_options(message_id)[1]:
-        if option != leading_options(message_id)[1][0]:
-            leadings_str += ", "
-        leadings_str += option
-
-    return leadings_str
-
-
-def message_update(message_id):
-    new_text = "The voting is over in " + \
-               str(time_left(message_id)) + \
-               time.strftime(" minutes from now (%H:%M).\n") + \
-               "Currently leading: " + get_leadings_str(message_id) + \
-               " with " + str(leading_options(message_id)[0]) + " vote(s)."
-
-    return new_text
 
 
 @client.event
 async def on_ready():
-    print("Eingeloggt als:")
+    print("Logged in as:")
     print(client.user.name)
-    print(client.user.id)
-    print("-------------")
+    print("=============")
 
-    post_to_dbotsorg()
+    all_votes = sqlib.votes.get_all()
+    pending_votes = list(filter(lambda v: v[2] > 0, all_votes))
+
+    for vote in pending_votes:
+        client.loop.create_task(timer(client, vote[0]))
+
+    post_to_apis(client)
 
 
 @client.event
+@handle_commands(client)
 async def on_message(message):
-    commands = ['vote', 'help', 'invite', 'info', 'about']
-    commands = list(map(lambda cmd: prefix + cmd, commands))
+    prefix = sqlib.server.get(message.server.id, 'prefix')[0]
 
-    if message.content.lower().startswith(tuple(commands)):
-        await client.send_typing(message.channel)
+    if alias_in(message.content, 'vote', prefix=prefix):
+        content = get_cmd_content(message.content)
 
-    if message.content.startswith(prefix + 'vote'):
-        content = message.content[6:]
+        title = "Vote/Poll"
+        options = None
+        duration = get_config('default_duration')
+        notify_when_ending = False
 
-        commands = ['--title', '-T', '--options', '-O', '-D']
-        values = {'title': "voting / poll", '-D': 10}
-        for command in commands:
-            if content.find(command) != -1:
-                quote = content.find('"')
-                if quote != -1:
-                    content = content[quote + 1:]
+        async def command_error(reason=" :confused: "):
+            await client.send_message(message.channel, "Command error: *{0}*\n"
+                                                       "Type `{prefix}vote help` to check how it works!"
+                                                       "".format(reason, prefix=prefix))
 
-                quote = content.find('"')
-                if quote != -1:
-                    values[command] = content[:content.find('"')]
-                    content = content[len(values[command]) + 1:]
+        if content.count('"') > 1:
+            subcommands = list(map(lambda x: x.strip(), content.split('"')))
+            last_item = subcommands.pop()  # delete empty item at the end
 
-        options = []
-        for command in values:
-            if command in ('--options', '-O'):
-                optstring = values[command]
+            if "--notify" in last_item or "-N" in last_item:
+                notify_when_ending = True
 
-                nextopt = optstring.find(';')
-                while nextopt != -1:
-                    options.append(optstring[:nextopt].strip())
-                    optstring = optstring[nextopt + 1:]
-                    nextopt = optstring.find(';')
+            skip_next = False
 
-                options.append(optstring.strip())
+            try:
+                for i in range(len(subcommands)):
+                    if skip_next:
+                        skip_next = False
+                        continue
 
-            if command in ('--title', '-T'):
-                values['title'] = values[command]
+                    subcmd = subcommands[i]
+                    nextone = subcommands[i+1]
 
-        if len(options) > 10:
-            options = options[:10]
+                    if any(x in subcmd for x in ["-T", "--title"]):
+                        title = nextone
+                        skip_next = True
 
-        # print(options)
+                    elif any(x in subcmd for x in ["-O", "--options"]):
+                        options = nextone
+                        skip_next = True
 
-        voting = discord.Embed(
-            title=values['title'],
-            color=0xcd3333,
-            description="Click a reaction to vote!"
+                    elif any(x in subcmd for x in ["-D", "--duration"]):
+                        duration = int(nextone)
+                        skip_next = True
+
+                    if any(x in subcmd for x in ["-N", "--notify"]):
+                        notify_when_ending = True
+
+                if options is None:
+                    await command_error("No options set.")
+                    return 0
+
+                if duration < 1:
+                    await command_error("Duration has to be at least 1 minute.")
+                    return None
+                elif duration > 60:
+                    await command_error("max. duration are 60 minutes.")
+                    return None
+
+            except ValueError:
+                await command_error("Duration has to be a number.")
+                return 0
+            except Exception:
+                await command_error("Invalid syntax.")
+                return 0
+
+        else:
+            content = content.split("|")
+
+            if len(content) == 2:
+                title = content[0]
+                options = content[1]
+            else:
+                options = content[0]
+
+        vote_embed = discord.Embed(
+            title=title,
+            description="Use the reactions to vote!",
+            color=int(get_config('color'), 16)
         )
-        voting.set_author(
-            name=message.author.name
-        )
+        vote_embed.set_author(name=message.author.name, icon_url=message.author.avatar_url)
+        vote_embed.set_footer(text=get_config('default_footer'))
 
-        # num_emojis = ['🇦', '🇧', '🇨', '🇩', '🇪', '🇫', '🇬', '🇭', '🇮', '🇯']
+        options = options.split(';')
+        if len(options) > 20:
+            await command_error("To many options were given. (max. 20)")
+            return 0
+        elif len(options) < 2:
+            await command_error("You have to set at least 2 options. Otherwise this makes no sense . . .")
+            return 0
 
-        option_index = 0
-        for option in options:
-            voting.add_field(
-                name=num_emojis[option_index],
-                value=option,
+        emojis = []
+        for i in range(len(options)):  # generates unicode emojis and embed-fields
+            hex_str = hex(224 + (6 + i))[2:]
+            reaction = b'\\U0001f1a'.replace(b'a', bytes(hex_str, "utf-8"))
+            reaction = reaction.decode("unicode-escape")
+            emojis.append(reaction)
+
+            if len(options[i]) == 0:
+                await command_error("Empty options are not allowed.")
+                return None
+
+            vote_embed.add_field(
+                name=reaction,
+                value=options[i],
                 inline=False
             )
-            option_index += 1
 
-        # send message:
+        msg = await client.send_message(message.channel, embed=vote_embed)
 
-        try:
-            await client.delete_message(message)
-        except discord.errors.Forbidden:
-            pass
+        emoji_dict = {}
+        for emoji in emojis:
+            await client.add_reaction(msg, emoji)
+            emoji_dict[emoji] = 0
 
-        duration = values['-D']
+        sqlib.votes.add_element(msg.id, {"options": json.dumps(emoji_dict),
+                                         "duration": duration,
+                                         "channel": msg.channel.id})
 
-        try:
-            if int(duration) >= 60:
-                duration = 59
-        except ValueError:
-            await client.send_message(message.channel, "Invalid duration.")
-            duration = 10
-        
-        try:
-            votemsg = await client.send_message(
-                message.channel,
-                "The voting is over in " + str(duration) + time.strftime(" minutes from now (%H:%M)."),
-                embed=voting
-            )
-        except discord.errors.Forbidden:
-            return 0
+        await refresh_vote_msg(msg, emoji_dict, int(duration), client, notify=notify_when_ending)
+        client.loop.create_task(timer(client, msg.id, notify=notify_when_ending))
 
-        for emoji in num_emojis:
-            jPoints.vote.set(votemsg.id + emoji, 0)
-
-        endtime = time.strftime('%H:') + str(int(time.strftime('%M')) + int(duration))
-        # print(endtime)
-        if int(endtime[3:]) % 60 < int(time.strftime('%M')):
-            endtime = str(int(endtime[:2]) + 1) + ':' + str(int(endtime[3:]) % 60)
-        if len(endtime) < 5:
-            endtime = endtime[:3] + '0' + endtime[3:]
-        jPoints.vote.set(votemsg.id + "TIME", endtime)
-
-        # add reactions:
-
-        for i in range(len(options)):
-            await client.add_reaction(votemsg, num_emojis[i])
-
-    elif message.content.startswith(prefix + 'invite'):
-        await client.send_message(
-            message.channel,
-            "Invite me to your server:\n"
-            "https://discordapp.com/oauth2/authorize?client_id=353537045320433664&scope=bot&permissions=27712"
+    elif alias_in(message.content, "invite", prefix=prefix):
+        invite = discord.Embed(
+            title="Invite Me!",
+            color=int(get_config('color'), 16),
+            url=get_config('invite_link')
         )
+        invite.set_thumbnail(url=get_config("thumbnail"))
+        invite.set_footer(text=get_config('default_footer'))
 
-    elif message.content.startswith(prefix + 'help'):
-        helpmsg = discord.Embed(
-            title="VoteIt - Help",
-            description="All commands and how they work.",
-            color=0xcd3333
-        )
+        await client.send_message(message.channel, embed=invite)
 
-        helpmsg.add_field(
-            name=prefix + "vote",
-            value="Start a voting:\n"
-                  "`{0}vote [options]`\n\n"
-                  "As options you can use:\n"
-                  "Set title: `--title` or `-T`\n"
-                  "Set vote options: `--options` or `-O`, separate options with `;`\n"
-                  "Set duration: `-D`, value in minutes\n\n"
-                  "All values have to stand in double quotes. For example:\n"
-                  '`{0}vote -T "Test" -O "option1;option2" -D "15"`'.format(prefix)
-        )
-        helpmsg.add_field(
-            name=prefix + "invite",
-            value="Sends a link to invite me to a server.",
-            inline=False
-        )
-        helpmsg.add_field(
-            name=prefix + "help",
-            value="Shows this help site.",
-            inline=False
-        )
-        helpmsg.add_field(
-            name=prefix + "info",
-            value="Detailed information about the bot and more.",
-            inline=False
-        )
+    elif alias_in(message.content, "support", prefix=prefix):
+        await client.send_message(message.channel, get_config('support_server'))
 
-        try:
-            if message.author.server_permissions.administrator:
-                await client.send_message(message.channel, embed=helpmsg)
-            else:
-                await client.send_message(message.author, embed=helpmsg)
-                await client.add_reaction(message, "✅")
+    elif alias_in(message.content, "prefix", prefix=prefix):
+        if not message.author.server_permissions.administrator:
+            await client.send_message(message.channel, "You have to admin to change the prefix.")
+            return None
 
-        except discord.errors.Forbidden:
-            return 0
-        except AttributeError:
-            return 0
+        content = get_cmd_content(message.content).lower()
 
-    elif message.content.lower().startswith((prefix + 'info', prefix + 'about')):
+        if len(content) == 0:
+            await client.send_message(message.channel, "Prefix too short.")
+        elif len(content) > 2:
+            await client.send_message(message.channel, "Prefix too long. (max. 2 chars)")
+        else:
+            sqlib.server.update(message.server.id, {'prefix': content})
+            await client.send_message(message.channel, f"Okay, new prefix is `{content}`.")
+
+    elif alias_in(message.content, "info", prefix=prefix):
         infotext = discord.Embed(
             title="VoteIt",
             description="About the bot.",
-            color=0xcd3333,
-            url="https://liba001.github.io/VoteIt/"
+            color=int(get_config('color'), 16),
+            url=get_config('website')
         )
         infotext.set_author(
             name="Linus Bartsch | LiBa01#8817",
@@ -288,104 +185,111 @@ async def on_message(message):
             icon_url="https://avatars0.githubusercontent.com/u/30984789?s=460&v=4"
         )
         infotext.set_thumbnail(
-            url="https://images.discordapp.net/avatars/353537045320433664/24558d0686edd48e2e6c6df9e3802c96.png?size=512"
+            url=get_config('thumbnail')
         )
         infotext.add_field(
             name="Developer",
             value="Name: **Linus Bartsch**\n"
                   "Discord: **LiBa01#8817**\n"
                   "GitHub: [LiBa001](https://github.com/LiBa001)\n"
-                  "I'm also at [Discordbots.org](https://discordbots.org/user/269959141508775937)",
+                  "I'm also at [Discordbots.org](https://discordbots.org/user/269959141508775937).\n"
+                  "I'd be very happy if you'd support me on "
+                  "[**Patreon**](https://www.patreon.com/user?u=8320690). :heart:\n",
             inline=True
         )
         infotext.add_field(
             name="Developed in:",
             value="Language: **Python3.6**\n"
-                  "Library: **discord.py** (0.16.8)\n"
+                  "Library: **discord.py** (0.16.12)\n"
         )
         infotext.add_field(
             name="Commands",
             value="Type `{0}help` to get all commands.\n"
                   "Join the [Official Support Server](https://discord.gg/z3X3uN4) "
-                  "if you have any questions or suggestions.".format(prefix)
+                  "if you have any questions or suggestions (or just to be one of the cool guys :sunglasses:)."
+                  "".format(prefix)
         )
         infotext.add_field(
             name="Stats",
             value="Server count: **{0}**\n"
-                  "Uptime: **{1}** hours, **{2}** minutes".format(len(client.servers), up_hours, up_minutes)
+                  "Uptime: **{1}** hours, **{2}** minutes\n"
+                  "Member count: **{3}**".format(len(client.servers), up_hours, up_minutes,
+                                                 len(list(client.get_all_members())))
         )
         infotext.set_footer(
             text="Special thanks to MaxiHuHe04#8905 who supported me a few times."
         )
 
         await client.send_message(message.channel, embed=infotext)
-    
-    elif client.user in message.mentions:
-        await client.send_message(message.channel, "Type `{0}help` to see available commands.".format(prefix))
+
+    elif alias_in(message.content, "donate", prefix=prefix):
+        await client.send_message(message.channel, "I'd be very thankful for your support. :heart:\n"
+                                                   "{0}".format(get_config('patreon')))
+
+
+async def update_votes(reaction, user):
+    if user.id != client.user.id:
+        duration = sqlib.votes.get(reaction.message.id, "duration")
+
+        if duration is None:  # proves if message is in database
+            return None
+        else:
+            duration = duration[0]
+
+        if duration == 0:
+            return None
+
+        options = json.loads(sqlib.votes.get(reaction.message.id, "options")[0])
+
+        emoji = reaction.emoji
+        if emoji in options:
+            votes = reaction.count - 1
+
+            options[emoji] = votes
+            sqlib.votes.update(reaction.message.id, {"options": json.dumps(options)})
+
+            if ":bell:" in reaction.message.content:
+                notify = True
+            else:
+                notify = False
+
+            await refresh_vote_msg(reaction.message, options, duration, client, notify=notify)
 
 
 @client.event
 async def on_reaction_add(reaction, user):
-    if user.id != client.user.id and reaction.emoji in num_emojis:
-        if time_left(reaction.message.id) is None:
-            return None
-        elif time_left(reaction.message.id) > 0:
-            jPoints.vote.add_to_Value(reaction.message.id + reaction.emoji, 1)
-            await client.edit_message(
-                reaction.message,
-                message_update(reaction.message.id)
-            )
-        elif time_left(reaction.message.id) <= 0:
-            await client.edit_message(
-                reaction.message,
-                "The voting is over.\n"
-                "Winner(s): " + get_leadings_str(reaction.message.id) +
-                " with " + str(leading_options(reaction.message.id)[0]) + " vote(s)."
-            )
-            jPoints.vote.remove_Element(reaction.message.id + "TIME")
+    await update_votes(reaction, user)
 
 
 @client.event
 async def on_reaction_remove(reaction, user):
-    if user.id != client.user.id and reaction.emoji in num_emojis:
-        if time_left(reaction.message.id) is None:
-            return None
-        elif time_left(reaction.message.id) > 0:
-            jPoints.vote.remove_from_Value(reaction.message.id + reaction.emoji, 1)
-            await client.edit_message(
-                reaction.message,
-                message_update(reaction.message.id)
-            )
-        elif time_left(reaction.message.id) <= 0:
-            await client.edit_message(
-                reaction.message,
-                "The voting is over.\n"
-                "Winner(s): " + get_leadings_str(reaction.message.id) +
-                " with " + str(leading_options(reaction.message.id)[0]) + " vote(s)."
-            )
-            jPoints.vote.remove_Element(reaction.message.id + "TIME")
+    await update_votes(reaction, user)
 
 
 @client.event
 async def on_server_join(server):
-    post_to_dbotsorg()
+    post_to_apis(client)
 
 
-if __name__ == "__main__":
-    async def uptime_count():
-        await client.wait_until_ready()
-        global up_hours
-        global up_minutes
-        up_hours = 0
-        up_minutes = 0
-
-        while not client.is_closed:
-            await asyncio.sleep(60)
-            up_minutes += 1
-            if up_minutes == 60:
-                up_minutes = 0
-                up_hours += 1
+@client.event
+async def on_server_remove(server):
+    post_to_apis(client)
 
 
-    client.loop.create_task(uptime_count())
-    client.run("BOT-TOKEN")  # TODO: insert Token
+async def uptime_count():
+    await client.wait_until_ready()
+    global up_hours
+    global up_minutes
+    up_hours = 0
+    up_minutes = 0
+
+    while not client.is_closed:
+        await asyncio.sleep(60)
+        up_minutes += 1
+        if up_minutes == 60:
+            up_minutes = 0
+            up_hours += 1
+
+
+client.loop.create_task(uptime_count())
+client.run(get_config('token'))

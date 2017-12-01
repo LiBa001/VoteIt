@@ -1,0 +1,15 @@
+{
+  "token": "BOT-TOKEN",
+  "admins": ["269959141508775937"],
+  "prefix": ".",
+  "color": "0xcd3333",
+  "default_footer": "~ bot by LiBa01#8817",
+  "default_duration": 10,
+  "invite_link": "https://discordapp.com/oauth2/authorize?client_id=353537045320433664&scope=bot&permissions=27712",
+  "thumbnail": "https://liba001.github.io/VoteIt/images/VoteIt.png",
+  "website": "https://liba001.github.io/VoteIt",
+  "support_server": "https://discord.gg/z3X3uN4",
+  "API_TOKEN(discordbots.org)": "API_TOKEN",
+  "API_TOKEN(bots.discord.pw)": "API_TOKEN",
+  "patreon": "https://www.patreon.com/user?u=8320690"
+}

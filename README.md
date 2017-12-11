@@ -13,6 +13,7 @@ Use the bot to make polls on your Discord-Server!
     * one CLI oriented and more complex
     * the other is simple but without special features (title and options only)
 * change the command prefix of the bot
+* easy yes-no voting command
 
 ### [Invite the bot!](https://discordapp.com/oauth2/authorize?client_id=353537045320433664&scope=bot&permissions=27712)
 When it's invited type *.help* to get an overview about the commands.  

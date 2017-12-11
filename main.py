@@ -143,6 +143,10 @@ async def on_message(message):
         await refresh_vote_msg(msg, emoji_dict, int(duration), client, notify=notify_when_ending)
         client.loop.create_task(timer(client, msg.id, notify=notify_when_ending))
 
+    elif alias_in(message.content, "yes-no", prefix=prefix):
+        await client.add_reaction(message, "👍")
+        await client.add_reaction(message, "👎")
+
     elif alias_in(message.content, "invite", prefix=prefix):
         invite = discord.Embed(
             title="Invite Me!",

@@ -45,6 +45,17 @@
     ]
   },
 
+  "yes-no":
+  {
+    "aliases": ["yes-no", "yesno", "yn", "approval", "agree"],
+    "help": [
+      "If you just wanna ask a short yes-no question, use this command instead of `{prefix}vote`!\n",
+      "Syntax:\n",
+      "`{prefix}yn [question]`\n\n",
+      "The bot will add a thumbs up and a thumbs down reaction."
+    ]
+  },
+
   "invite":
   {
     "aliases": ["invite", "get"],

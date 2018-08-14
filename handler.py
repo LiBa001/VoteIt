@@ -265,7 +265,7 @@ def handle_commands(client):
 
                     else:
                         try:
-                            await client.send_message(message.author, embed=help_embed)
+                            await message.author.send(embed=help_embed)
                             await message.channel.send("Help sent. :white_check_mark:")
                         except discord.Forbidden:
                             await message.channel.send("You have to turn on your PM.")
@@ -312,8 +312,7 @@ def handle_commands(client):
                         return await func(message)
 
             elif client.user in message.mentions:
-                await client.send_message(
-                    message.channel,
+                await message.channel.send(
                     f"Type `{sqlib.server.get(message.guild.id, 'prefix')[0]}help` to see the command list!"
                 )
                 return await func(message)

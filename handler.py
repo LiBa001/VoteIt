@@ -154,10 +154,10 @@ async def refresh_vote_msg(message: discord.Message, options: dict, duration: in
 
         winners = "Final winner{0}: {1[0]} with {1[1]} vote{2}.".format(winner_plural, leading_options, vote_plural)
 
-        msg = await coro_client.edit_message(message, new_content=f"The voting is over.\n{winners}")
+        await message.edit(content=f"The voting is over.\n{winners}")
 
         if notify:
-            await coro_client.send_message(message.channel, f":bell: Voting is over. :bell: \n")
+            await message.channel.send(f":bell: Voting is over. :bell: \n")
 
     else:
         if notify:
@@ -165,19 +165,19 @@ async def refresh_vote_msg(message: discord.Message, options: dict, duration: in
         else:
             notification = ""
 
-        msg = await coro_client.edit_message(message, new_content="The voting is over in {0} minutes. {clock_emoji} \n"
-                                                                  "{notification}"
-                                                                  "Currently leading: {1[0]} with {1[1]} vote{2}."
-                                                                  "".format(duration, leading_options, vote_plural,
-                                                                            clock_emoji=clock_emoji,
-                                                                            notification=notification)
-                                             )
-    return msg
+        await message.edit(content="The voting is over in {0} minutes. {clock_emoji} \n"
+                                         "{notification}"
+                                         "Currently leading: {1[0]} with {1[1]} vote{2}."
+                                         "".format(duration, leading_options, vote_plural,
+                                                   clock_emoji=clock_emoji,
+                                                   notification=notification)
+                           )
+    return message
 
 
 async def timer(client: discord.Client, vote_id: str, notify: bool=False):
     t_needed = 0
-    while not client.is_closed:
+    while not client.is_closed():
         await asyncio.sleep(60 - t_needed)
 
         t_start = time.time()
@@ -189,10 +189,10 @@ async def timer(client: discord.Client, vote_id: str, notify: bool=False):
         duration -= 1
 
         sqlib.votes.update(msg_id, {"duration": duration})
-        channel = client.get_channel(channel_id)
+        channel = client.get_channel(int(channel_id))
 
         try:
-            message = await client.get_message(channel, msg_id)
+            message = await channel.get_message(msg_id)
         except AttributeError:
             print("AttributeError")
             continue
@@ -210,19 +210,19 @@ def handle_commands(client):
     def decorated(func):
         @functools.wraps(func)
         async def wrapper(message):
-            if message.channel.is_private:
+            if isinstance(message.channel, discord.DMChannel):
                 if message.author != client.user:
-                    await client.send_message(message.channel, "Sorry, I can't help you in a private chat.")
+                    await message.channel.send("Sorry, I can't help you in a private chat.")
                 return None
 
-            client_member = message.server.get_member(client.user.id)
+            client_member = message.guild.get_member(client.user.id)
             if not client_member.permissions_in(message.channel).send_messages:
                 return None
 
-            prefix = sqlib.server.get(message.server.id, 'prefix')
+            prefix = sqlib.server.get(message.guild.id, 'prefix')
             if prefix is None:
                 prefix = get_config('prefix')
-                sqlib.server.add_element(message.server.id, {'prefix': prefix})
+                sqlib.server.add_element(message.guild.id, {'prefix': prefix})
             else:
                 prefix = prefix[0]
 
@@ -231,12 +231,13 @@ def handle_commands(client):
             footer = get_config('default_footer')
 
             if message.content.lower().startswith(all_aliases):  # checks if message is a command
-                await client.send_typing(message.channel)
+                async with message.channel.typing():
+                    pass
 
                 if alias_in(message.content, 'help', prefix=prefix):
                     content = get_cmd_content(message.content)
 
-                    if content.lower() in get_all_aliases(prefix):
+                    if content.lower() in get_all_aliases(prefix=None):
                         help_embed = get_help_embed(content.lower(), prefix)
 
                     else:
@@ -259,15 +260,15 @@ def handle_commands(client):
                         )
                         help_embed.set_thumbnail(url=get_config("thumbnail"))
 
-                    if message.author.server_permissions.administrator:
-                        await client.send_message(message.channel, embed=help_embed)
+                    if message.author.guild_permissions.administrator:
+                        await message.channel.send(embed=help_embed)
 
                     else:
                         try:
-                            await client.send_message(message.author, embed=help_embed)
-                            await client.send_message(message.channel, "Help sent. :white_check_mark:")
+                            await message.author.send(embed=help_embed)
+                            await message.channel.send("Help sent. :white_check_mark:")
                         except discord.Forbidden:
-                            await client.send_message(message.channel, "You have to turn on your PM.")
+                            await message.channel.send("You have to turn on your PM.")
 
                 elif alias_in(message.content, 'aliases', prefix=prefix):
                     content = get_cmd_content(message.content)
@@ -293,7 +294,7 @@ def handle_commands(client):
                             text=footer
                         )
 
-                    await client.send_message(message.channel, embed=aliases_embed)
+                    await message.channel.send(embed=aliases_embed)
 
                 else:
                     content = get_cmd_content(message.content)
@@ -301,19 +302,18 @@ def handle_commands(client):
                                          len(prefix):]  # splits command from prefix and other content
                     if content.lower().startswith('help'):
                         help_embed = get_help_embed(cmd_without_prefix, prefix)
-                        await client.send_message(message.channel, embed=help_embed)  # sends cmd specific help
+                        await message.channel.send(embed=help_embed)  # sends cmd specific help
 
                     elif content.lower().startswith('aliases'):
                         aliases_embed = get_aliases_embed(cmd_without_prefix)
-                        await client.send_message(message.channel, embed=aliases_embed)
+                        await message.channel.send(embed=aliases_embed)
 
                     else:
                         return await func(message)
 
             elif client.user in message.mentions:
-                await client.send_message(
-                    message.channel,
-                    f"Type `{sqlib.server.get(message.server.id, 'prefix')[0]}help` to see the command list!"
+                await message.channel.send(
+                    f"Type `{sqlib.server.get(message.guild.id, 'prefix')[0]}help` to see the command list!"
                 )
                 return await func(message)
 
@@ -330,7 +330,9 @@ def post_to_apis(client: discord.Client()):
     }
     for domain in domains:
         count_json = json.dumps({
-            "server_count": len(client.servers)
+            "server_count": len(client.guilds),
+            "shard_count": client.shard_count,
+            "shard_id": client.shard_id
         })
 
         # Resolve HTTP redirects

@@ -1,6 +1,6 @@
 from handler import *
 
-client = discord.Client()
+client = discord.AutoShardedClient()
 
 
 @client.event
@@ -21,7 +21,7 @@ async def on_ready():
 @client.event
 @handle_commands(client)
 async def on_message(message):
-    prefix = sqlib.server.get(message.server.id, 'prefix')[0]
+    prefix = sqlib.server.get(message.guild.id, 'prefix')[0]
 
     if alias_in(message.content, 'vote', prefix=prefix):
         content = get_cmd_content(message.content)
@@ -32,7 +32,7 @@ async def on_message(message):
         notify_when_ending = False
 
         async def command_error(reason=" :confused: "):
-            await client.send_message(message.channel, "Command error: *{0}*\n"
+            await message.channel.send("Command error: *{0}*\n"
                                                        "Type `{prefix}vote help` to check how it works!"
                                                        "".format(reason, prefix=prefix))
 
@@ -129,11 +129,11 @@ async def on_message(message):
                 inline=False
             )
 
-        msg = await client.send_message(message.channel, embed=vote_embed)
+        msg = await message.channel.send(embed=vote_embed)
 
         emoji_dict = {}
         for emoji in emojis:
-            await client.add_reaction(msg, emoji)
+            await msg.add_reaction(emoji)
             emoji_dict[emoji] = 0
 
         sqlib.votes.add_element(msg.id, {"options": json.dumps(emoji_dict),
@@ -144,8 +144,8 @@ async def on_message(message):
         client.loop.create_task(timer(client, msg.id, notify=notify_when_ending))
 
     elif alias_in(message.content, "yes-no", prefix=prefix):
-        await client.add_reaction(message, "👍")
-        await client.add_reaction(message, "👎")
+        await message.add_reaction("👍")
+        await message.add_reaction("👎")
 
     elif alias_in(message.content, "invite", prefix=prefix):
         invite = discord.Embed(
@@ -156,25 +156,25 @@ async def on_message(message):
         invite.set_thumbnail(url=get_config("thumbnail"))
         invite.set_footer(text=get_config('default_footer'))
 
-        await client.send_message(message.channel, embed=invite)
+        await message.channel.send(embed=invite)
 
     elif alias_in(message.content, "support", prefix=prefix):
-        await client.send_message(message.channel, get_config('support_server'))
+        await message.channel.send(get_config('support_guild'))
 
     elif alias_in(message.content, "prefix", prefix=prefix):
-        if not message.author.server_permissions.administrator:
-            await client.send_message(message.channel, "You have to admin to change the prefix.")
+        if not message.author.guild_permissions.administrator:
+            await message.channel.send("You have to admin to change the prefix.")
             return None
 
         content = get_cmd_content(message.content).lower()
 
         if len(content) == 0:
-            await client.send_message(message.channel, "Prefix too short.")
+            await message.channel.send("Prefix too short.")
         elif len(content) > 2:
-            await client.send_message(message.channel, "Prefix too long. (max. 2 chars)")
+            await message.channel.send("Prefix too long. (max. 2 chars)")
         else:
-            sqlib.server.update(message.server.id, {'prefix': content})
-            await client.send_message(message.channel, f"Okay, new prefix is `{content}`.")
+            sqlib.server.update(message.guild.id, {'prefix': content})
+            await message.channel.send(f"Okay, new prefix is `{content}`.")
 
     elif alias_in(message.content, "info", prefix=prefix):
         infotext = discord.Embed(
@@ -209,26 +209,26 @@ async def on_message(message):
         infotext.add_field(
             name="Commands",
             value="Type `{0}help` to get all commands.\n"
-                  "Join the [Official Support Server](https://discord.gg/z3X3uN4) "
+                  "Join the [Official Support guild](https://discord.gg/z3X3uN4) "
                   "if you have any questions or suggestions (or just to be one of the cool guys :sunglasses:)."
                   "".format(prefix)
         )
         infotext.add_field(
             name="Stats",
-            value="Server count: **{0}**\n"
+            value="guild count: **{0}**\n"
                   "Uptime: **{1}** hours, **{2}** minutes\n"
-                  "Member count: **{3}**".format(len(client.servers), up_hours, up_minutes,
+                  "Member count: **{3}**".format(len(client.guilds), up_hours, up_minutes,
                                                  len(list(client.get_all_members())))
         )
         infotext.set_footer(
             text="Special thanks to MaxiHuHe04#8905 who supported me a few times."
         )
 
-        await client.send_message(message.channel, embed=infotext)
+        await message.channel.send(embed=infotext)
 
     elif alias_in(message.content, "donate", prefix=prefix):
-        await client.send_message(message.channel, "I'd be very thankful for your support. :heart:\n"
-                                                   "{0}".format(get_config('patreon')))
+        await message.channel.send("I'd be very thankful for your support. :heart:\n"
+                                   "{0}".format(get_config('patreon')))
 
 
 async def update_votes(reaction, user):
@@ -271,12 +271,12 @@ async def on_reaction_remove(reaction, user):
 
 
 @client.event
-async def on_server_join(server):
+async def on_guild_join(guild):
     post_to_apis(client)
 
 
 @client.event
-async def on_server_remove(server):
+async def on_guild_remove(guild):
     post_to_apis(client)
 
 
